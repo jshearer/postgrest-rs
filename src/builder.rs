@@ -4,7 +4,8 @@ use reqwest::{
 };
 
 /// QueryBuilder struct
-pub struct Builder<'a> {
+#[derive(Clone)]
+pub struct Builder {
     method: Method,
     url: String,
     schema: Option<String>,
@@ -15,13 +16,13 @@ pub struct Builder<'a> {
     is_rpc: bool,
     // sharing a client is a good idea, performance wise
     // the client has to live at least as much as the builder
-    client: &'a Client,
+    client: Client,
 }
 
 // TODO: Test Unicode support
-impl<'a> Builder<'a> {
+impl Builder {
     /// Creates a new `Builder` with the specified `schema`.
-    pub fn new<T>(url: T, schema: Option<String>, headers: HeaderMap, client: &'a Client) -> Self
+    pub fn new<T>(url: T, schema: Option<String>, headers: HeaderMap, client: Client) -> Self
     where
         T: Into<String>,
     {
@@ -586,7 +587,7 @@ mod tests {
     #[test]
     fn only_accept_json() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client);
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client);
         assert_eq!(
             builder.headers.get("Accept").unwrap(),
             HeaderValue::from_static("application/json")
@@ -596,7 +597,7 @@ mod tests {
     #[test]
     fn auth_with_token() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).auth("$Up3rS3crET");
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).auth("$Up3rS3crET");
         assert_eq!(
             builder.headers.get("Authorization").unwrap(),
             HeaderValue::from_static("Bearer $Up3rS3crET")
@@ -606,7 +607,7 @@ mod tests {
     #[test]
     fn select_assert_query() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).select("some_table");
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).select("some_table");
         assert_eq!(builder.method, Method::GET);
         assert_eq!(
             builder
@@ -619,7 +620,7 @@ mod tests {
     #[test]
     fn order_assert_query() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).order("id");
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).order("id");
         assert_eq!(
             builder
                 .queries
@@ -631,7 +632,7 @@ mod tests {
     #[test]
     fn order_with_options_assert_query() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).order_with_options(
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).order_with_options(
             "name",
             Some("cities"),
             true,
@@ -648,7 +649,7 @@ mod tests {
     #[test]
     fn limit_assert_range_header() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).limit(20);
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).limit(20);
         assert_eq!(
             builder.headers.get("Range").unwrap(),
             HeaderValue::from_static("0-19")
@@ -658,7 +659,7 @@ mod tests {
     #[test]
     fn foreign_table_limit_assert_query() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client)
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client)
             .foreign_table_limit(20, "some_table");
         assert_eq!(
             builder
@@ -671,7 +672,7 @@ mod tests {
     #[test]
     fn range_assert_range_header() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).range(10, 20);
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).range(10, 20);
         assert_eq!(
             builder.headers.get("Range").unwrap(),
             HeaderValue::from_static("10-20")
@@ -681,7 +682,7 @@ mod tests {
     #[test]
     fn single_assert_accept_header() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).single();
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).single();
         assert_eq!(
             builder.headers.get("Accept").unwrap(),
             HeaderValue::from_static("application/vnd.pgrst.object+json")
@@ -691,7 +692,7 @@ mod tests {
     #[test]
     fn upsert_assert_prefer_header() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).upsert("ignored");
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).upsert("ignored");
         assert_eq!(
             builder.headers.get("Prefer").unwrap(),
             HeaderValue::from_static("return=representation,resolution=merge-duplicates")
@@ -701,7 +702,7 @@ mod tests {
     #[test]
     fn not_rpc_should_not_have_flag() {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client).select("ignored");
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client).select("ignored");
         assert_eq!(builder.is_rpc, false);
     }
 
@@ -709,7 +710,7 @@ mod tests {
     fn rpc_should_have_body_and_flag() {
         let client = Client::new();
         let builder =
-            Builder::new(RPC_URL, None, HeaderMap::new(), &client).rpc("{\"a\": 1, \"b\": 2}");
+            Builder::new(RPC_URL, None, HeaderMap::new(), client).rpc("{\"a\": 1, \"b\": 2}");
         assert_eq!(builder.body.unwrap(), "{\"a\": 1, \"b\": 2}");
         assert_eq!(builder.is_rpc, true);
     }
@@ -717,7 +718,7 @@ mod tests {
     #[test]
     fn chain_filters() -> Result<(), Box<dyn std::error::Error>> {
         let client = Client::new();
-        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), &client)
+        let builder = Builder::new(TABLE_URL, None, HeaderMap::new(), client)
             .eq("username", "supabot")
             .neq("message", "hello world")
             .gte("channel_id", "1")
